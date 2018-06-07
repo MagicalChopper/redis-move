@@ -31,27 +31,9 @@ public class MoveServiceImpl implements MoveService {
     @Autowired
     RedissonClient redissonClient;
 
-
-    @Override
-    public RKeys getRKeys() {
-        return redissonClient.getKeys();
-    }
-
-    @Override
-    public Object readRedis(String key) {
-        return redissonClient.getMapCache(key);
-    }
-
-    @Override
-    public void writeRedis(Map<String,Object> map) {
-        Config config = redissonClient.getConfig();
-        config.useSingleServer().setDatabase(15);
-        RedissonClient casualRedissonClient = Redisson.create(config);
-        Map.Entry<String,Object> entry = (Map.Entry<String, Object>) map.entrySet();
-        RBucket<Object> bucket = casualRedissonClient.getBucket(entry.getKey());
-        bucket.set(entry.getValue());
-    }
-
+    /**
+     * 暂时是获取所有的key过滤掉dubbo开头的，测试完成读写功能
+     */
     @Override
     public void move() {
         List list = new ArrayList<>();
@@ -64,7 +46,6 @@ public class MoveServiceImpl implements MoveService {
                continue;
             }
             Object obj = readUnit(rKeys,key);
-            System.out.println(obj);
             if(obj!=null){
                 list.add(obj);
             }
@@ -72,7 +53,7 @@ public class MoveServiceImpl implements MoveService {
     }
 
     public Object readUnit(RKeys rKeys,String key){
-        Object obj = new Object();
+        Object obj = null;
         RType type = rKeys.getType(key);
         try{
             switch (type) {
@@ -101,7 +82,6 @@ public class MoveServiceImpl implements MoveService {
             }
         }catch (RuntimeException e){
         logger.info("读取出现异常,key:{},异常信息:{}",key,e.getMessage());
-        obj = null;
         }
         return obj;
     }

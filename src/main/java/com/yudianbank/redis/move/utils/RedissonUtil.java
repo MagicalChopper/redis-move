@@ -48,8 +48,6 @@ public class RedissonUtil {
      * @return
      */
     public Collection<ScoredEntry<Object>> zsetRead(RedissonClient redissonClient, String key){
-//        RScoredSortedSet rScoredSortedSet = redissonClient.getScoredSortedSet(key);
-//        rScoredSortedSet.entryRange(0,-1);
         return  redissonClient.getScoredSortedSet(key).entryRange(0,-1);
     }
 
