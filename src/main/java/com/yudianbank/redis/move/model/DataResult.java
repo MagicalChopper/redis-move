@@ -1,17 +1,16 @@
 package com.yudianbank.redis.move.model;
 
+import org.redisson.api.RType;
+
+
+/**
+ * 返回结果封装
+ */
 public class DataResult {
 
-    private String key;
-    private Object obj;
-
-    public DataResult() {
-    }
-
-    public DataResult(String key, Object obj) {
-        this.key = key;
-        this.obj = obj;
-    }
+    private String key;//数据key
+    private Object obj;//数据value
+    private RType keyType;//key类型
 
     public String getKey() {
         return key;
@@ -27,5 +26,13 @@ public class DataResult {
 
     public void setObj(Object obj) {
         this.obj = obj;
+    }
+
+    public RType getKeyType() {
+        return keyType;
+    }
+
+    public void setKeyType(RType keyType) {
+        this.keyType = keyType;
     }
 }

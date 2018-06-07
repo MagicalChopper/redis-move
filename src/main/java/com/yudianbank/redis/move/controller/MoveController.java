@@ -1,18 +1,15 @@
 package com.yudianbank.redis.move.controller;
 
 import com.yudianbank.redis.move.service.MoveService;
+import org.redisson.Redisson;
 import org.redisson.api.*;
+import org.redisson.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
-
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 @Controller
 @RequestMapping
@@ -30,32 +27,63 @@ public class MoveController {
     @ResponseBody
     public Object move(){
         moveService.move();
-        logger.info("=================end=================");
         return "succ";
     }
 
     @RequestMapping("test")
     @ResponseBody
     public String test(){
-        RBucket rBucket = redissonClient.getBucket("proY0175170724");
-        Object bucket = rBucket.get();
-        Class bucketClass = bucket.getClass();
-
-        RList rList = redissonClient.getList("testBatch");
-        Object list = rList.readAll();
-        Class listClass = list.getClass();
-
-//        RSet rSet = redissonClient.getSet("escape_check_url_authority");
-//        Set set = rSet.readAll();
-//        Class setClass = set.getClass();
+//        RedissonClient redissonClient0 = changeDB(redissonClient,0);
+//        redissonClient0.getBucket("lhtest").set("test");
 //
-//        RSortedSet rSortedSet = redissonClient.getSortedSet("redisson__idle__set__{ADJUST#22#200655#net.engining.pcx.cc.param.model.PostCode}");
-//        Set sortSet = rSortedSet.readAll();
-//        Class sortSetClass = sortSet.getClass();
+//        RedissonClient redissonClient15 = changeDB(redissonClient,15);
+//        redissonClient15.getBucket("lhtest").set("test");
 
-        RMap rMap = redissonClient.getMap("authority_cache_appManage");
-        Set<Map.Entry> entrySet = rMap.readAllEntrySet();
+        /**
+         * obj
+         */
+//        Object object = redissonClient0.getBucket("proY0175170724").get();
+
+        /**
+         * list
+         */
+//        RList rList = redissonClient0.getList("testBatch");
+
+        /**
+         * set
+         */
+//        RSet rSet = redissonClient0.getSet("escape_check_url_authority");
+
+        /**
+         * zset
+         */
+//        RSortedSet rSortedSet = redissonClient.getSortedSet("redisson__idle__set__{ADJUST#22#200655#net.engining.pcx.cc.param.model.PostCode}");
+
+        /**
+         * hash
+         */
+//        RMap rMap = redissonClient.getMap("authority_cache_appManage");
+
+
+//        RedissonClient redissonClient15 = changeDB(redissonClient,15);
+//
+//        redissonClient15.getBucket("proY0175170724").set(object);
+//
+//        redissonClient15.getList("testBatch").addAll(rList);
+
+//        redissonClient15.getSet("escape_check_url_authority").addAll("escape_check_url_authority");//异常
+
+//        redissonClient.getSortedSet("redisson__idle__set__{ADJUST#22#200655#net.engining.pcx.cc.param.model.PostCode}").addAll(rSortedSet);//异常
+
+//        redissonClient.getMap("authority_cache_appManage").putAll(rMap);
+
         return "succ";
+    }
+
+    public static RedissonClient changeDB(RedissonClient redissonClient,int dbNum){
+        Config config = redissonClient.getConfig();
+        config.useSingleServer().setDatabase(dbNum);
+        return Redisson.create(config);
     }
 
 }
