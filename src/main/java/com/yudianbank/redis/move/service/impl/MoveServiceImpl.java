@@ -2,6 +2,7 @@ package com.yudianbank.redis.move.service.impl;
 
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yudianbank.redis.move.model.DataResult;
 import com.yudianbank.redis.move.service.MoveService;
 import com.yudianbank.redis.move.utils.RedissonUtil;
 import org.redisson.Redisson;
@@ -14,7 +15,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import sun.net.www.protocol.http.HttpURLConnection;
 
+import javax.xml.crypto.Data;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -36,53 +39,95 @@ public class MoveServiceImpl implements MoveService {
      */
     @Override
     public void move() {
+        List list = read();
+    }
+
+    public List<DataResult> read(){
         List list = new ArrayList<>();
-        RKeys rKeys = redissonClient.getKeys();
+        RKeys rKeys = redissonClient.getKeys();//获取Rkeys可以迭代遍历key
         Iterable<String> iterable = rKeys.getKeysByPattern("*");
         Iterator it = iterable.iterator();
         while (it.hasNext()){
             String key = (String) it.next();
             if(key.startsWith("/dubbo/")){
-               continue;
+                continue;
             }
-            Object obj = readUnit(rKeys,key);
-            if(obj!=null){
-                list.add(obj);
+            DataResult dataResult = readUnit(rKeys,key);
+            if(dataResult.getObj()!=null){
+                list.add(dataResult);
+            }else{
+                logger.info( "==================================================");
             }
         }
+        return list;
     }
 
-    public Object readUnit(RKeys rKeys,String key){
-        Object obj = null;
+    /**
+     * 单元读
+     * @param rKeys
+     * @param key
+     * @return
+     */
+    public DataResult readUnit(RKeys rKeys, String key){
+        DataResult dataResult = new DataResult();
+        dataResult.setKey(key);
         RType type = rKeys.getType(key);
-        try{
-            switch (type) {
-                case OBJECT:
-                    logger.info( "正在读取string，key:{}", key );
-                    obj = redissonUtil.strRead( redissonClient, key );
-                    break;
-                case LIST:
-                    logger.info( "正在读取list，key:{}", key );
-                    obj = redissonUtil.listRead( redissonClient, key );
-                    break;
-                case SET:
-                    logger.info( "正在读取set，key:{}", key );
-                    obj = redissonUtil.setRead( redissonClient, key );
-                    break;
-                case ZSET:
-                    logger.info( "正在读取zset，key:{}", key );
-                    obj = redissonUtil.zsetRead( redissonClient, key );
-                    break;
-                case MAP:
-                    logger.info( "正在读取hash，key:{}", key );
-                    obj = redissonUtil.hashRead( redissonClient, key );
-                    break;
-                default:
-                    logger.error( "============数据类型异常=============key:{}", key );
-            }
-        }catch (RuntimeException e){
-        logger.info("读取出现异常,key:{},异常信息:{}",key,e.getMessage());
+        if(type==null){
+            logger.error( "============未获取到数据类型=============key:{}", key );
+            return dataResult;
         }
-        return obj;
+        Object obj = null;
+
+        switch (type) {
+            case OBJECT:
+                logger.info( "正在读取object，key:{}", key );
+                try{
+                    obj = redissonUtil.strRead( redissonClient, key );
+                    dataResult.setObj(obj);
+                }catch (RuntimeException e){
+                    logger.error("jackson解析，开头不允许为0，异常信息:{},堆栈信息:{}.type:object,key:{}",e.getMessage(),e.getStackTrace(),key);
+                }
+                break;
+            case LIST:
+                logger.info( "正在读取list，key:{}", key );
+                try{
+                    obj = redissonUtil.listRead( redissonClient, key );
+                    dataResult.setObj(obj);
+                }catch (RuntimeException e){
+                    logger.error("jackson对象转化异常,异常信息：{},堆栈信息：{},type:list,key:{}",e.getMessage(),e.getStackTrace(),key);
+                }
+                break;
+            case SET:
+                logger.info( "正在读取set，key:{}", key );
+                try{
+                    obj = redissonUtil.setRead( redissonClient, key );
+                    dataResult.setObj(obj);
+                }catch (RuntimeException e){
+                    logger.error("jackson解析异常，异常信息：{},堆栈信息：{},type:set,key:{}",e.getMessage(),e.getStackTrace(),key);
+                }
+                break;
+            case ZSET:
+                logger.info( "正在读取zset，key:{}", key );
+                try{
+                    obj = redissonUtil.zsetRead( redissonClient, key );
+                    dataResult.setObj(obj);
+                }catch (RuntimeException e){
+                    logger.error("jackson解析异常，异常信息：{},堆栈信息：{},type:zset,key:{}",e.getMessage(),e.getStackTrace(),key);
+                }
+                break;
+            case MAP:
+                logger.info( "正在读取hash，key:{}", key );
+                try{
+                    obj = redissonUtil.hashRead( redissonClient, key );
+                    dataResult.setObj(obj);
+                }catch (RuntimeException e){
+                    logger.error("jackson解析异常，异常信息：{},堆栈信息：{},type:hash,key:{}",e.getMessage(),e.getStackTrace(),key);
+                }
+                break;
+            default:
+
+        }
+
+        return new DataResult(key,obj);
     }
 }
