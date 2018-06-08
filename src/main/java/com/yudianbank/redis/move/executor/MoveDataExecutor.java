@@ -1,33 +1,27 @@
-package com.yudianbank.redis.move.service.impl;
+package com.yudianbank.redis.move.executor;
 
+import com.yudianbank.redis.move.end.EndReport;
 import com.yudianbank.redis.move.model.DataResult;
-import com.yudianbank.redis.move.service.MoveService;
 import com.yudianbank.redis.move.utils.RedissonUtil;
 import org.redisson.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
+import java.io.*;
 import java.util.*;
 
-
-@Service
-public class MoveServiceImpl implements MoveService {
-
-    private static final Logger logger = LoggerFactory.getLogger(MoveServiceImpl.class);
+@Configuration
+@ConfigurationProperties(prefix = "spring.redisson")
+public class MoveDataExecutor {
+    private static final Logger logger = LoggerFactory.getLogger(MoveDataExecutor.class);
 
     private static final RedissonUtil redissonUtil = new RedissonUtil();
 
-    /**
-     * 从哪个数据库读
-     */
-    private static final int DB_READ_FROM = 0;
 
-    /**
-     * 写到哪个数据库
-     */
-    private static final int DB_WRITE_TO = 15;
 
     /**
      * 根据"read"获取读取失败的key的list列表
@@ -39,17 +33,106 @@ public class MoveServiceImpl implements MoveService {
      */
     private static final String WRITE_ERR_LIST = "write";
 
+    /**
+     * 系统加载获取properties文件里的配置的，从哪个数据库读
+     */
+    private int dbReadFrom ;
+
+    /**
+     * 系统加载获取properties文件里的配置的，写到哪个数据库
+     */
+    private int dbWriteTo;
+
+    /**
+     * 系统加载获取properties文件里的配置的，异常情况的key记录文件输出路径
+     */
+    private String filePath;
+
+    /**
+     *系统加载获取properties文件里的配置的， 需要过滤，不迁移的数据前缀
+     */
+    private String[] filters;
+
+    public int getDbReadFrom() {
+        return dbReadFrom;
+    }
+
+    public void setDbReadFrom(int dbReadFrom) {
+        this.dbReadFrom = dbReadFrom;
+    }
+
+    public int getDbWriteTo() {
+        return dbWriteTo;
+    }
+
+    public void setDbWriteTo(int dbWriteTo) {
+        this.dbWriteTo = dbWriteTo;
+    }
+
+    public String getFilePath() {
+        return filePath;
+    }
+
+    public void setFilePath(String filePath) {
+        this.filePath = filePath;
+    }
+
+    public String[] getFilters() {
+        return filters;
+    }
+
+    public void setFilters(String[] filters) {
+        this.filters = filters;
+    }
+
     @Autowired
     RedissonClient redissonClient;
 
     /**
      * 暂时是获取所有的key过滤掉dubbo开头的，测试完成读写功能
      */
-    @Override
-    public void move() {
+    @Bean(initMethod = "init",destroyMethod = "destory")
+    public EndReport move() {
+        //读取数据
         List<DataResult> list = read();
+        //写入，返回失败的key
         Map<String,List<String>> map = write(list);
-        logger.info("====================END=======================");
+        //失败的key写入文件
+        try {
+            recordError(map,filePath);
+        } catch (IOException e) {
+            logger.error("失败的key记录异常,异常信息：{}",e.getMessage());
+            e.printStackTrace();
+        }
+        return new EndReport();
+    }
+
+    /**
+     * 记录失败的key写到文件中
+     * @throws IOException
+     */
+    public void recordError(Map<String,List<String>> map,String filePath) throws IOException {
+        File file = new File(filePath);
+        OutputStreamWriter outputStreamWriter = new OutputStreamWriter(new FileOutputStream(file));
+        BufferedWriter bufferedWriter = new BufferedWriter(outputStreamWriter);
+        //记录读取失败的key写入文件
+        bufferedWriter.write("读取失败的key：");
+        bufferedWriter.newLine();
+        List<String> readErr = map.get(READ_ERR_LIST);
+        for (String key : readErr) {
+            bufferedWriter.write(key);
+            bufferedWriter.newLine();
+        }
+        //记录写入失败的key写入文件
+        bufferedWriter.write("写入失败的key：");
+        bufferedWriter.newLine();
+        List<String> writeErr = map.get(WRITE_ERR_LIST);
+        for (String key : writeErr) {
+            bufferedWriter.write(key);
+            bufferedWriter.newLine();
+        }
+        bufferedWriter.close();
+        outputStreamWriter.close();
     }
 
     /**
@@ -57,16 +140,26 @@ public class MoveServiceImpl implements MoveService {
      * @return
      */
     public List<DataResult> read(){
-        RedissonClient readRedissonClient = redissonUtil.changeDB(redissonClient,DB_READ_FROM);
+        RedissonClient readRedissonClient = redissonUtil.changeDB(redissonClient,dbReadFrom);
         List list = new ArrayList<>();
         RKeys rKeys = readRedissonClient.getKeys();//获取Rkeys可以迭代遍历key
         Iterable<String> iterable = rKeys.getKeysByPattern("*");
         Iterator it = iterable.iterator();
         while (it.hasNext()){
             String key = (String) it.next();
-            if(key.startsWith("/dubbo/")){
+            //是否过滤的标志位,默认不过滤
+            int flag = 0;
+            for (String filter : filters) {
+                if(key.startsWith(filter)){
+                    flag = 1;//如果击中过滤名单置为，更改标志位
+                    break;
+                }
+            }
+            //判断是否过滤
+            if(flag==1){
                 continue;
             }
+
             DataResult dataResult = readUnit(readRedissonClient,rKeys,key);
             list.add(dataResult);
         }
@@ -80,7 +173,7 @@ public class MoveServiceImpl implements MoveService {
      * @return
      */
     public Map<String,List<String>> write(List<DataResult> list){
-        RedissonClient writeRedissonClient = redissonUtil.changeDB(redissonClient,DB_WRITE_TO);
+        RedissonClient writeRedissonClient = redissonUtil.changeDB(redissonClient,dbWriteTo);
         logger.info("写入的数据库是：{}",writeRedissonClient.getConfig().useSingleServer().getDatabase());
         List<String> readErrList = new ArrayList();
         List<String> writeErrList = new ArrayList<>();
